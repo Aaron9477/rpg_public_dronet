@@ -1,3 +1,6 @@
+#!usr/bin/env python2
+#!coding=utf-8
+
 import re
 import os
 import numpy as np
@@ -13,6 +16,7 @@ from keras.models import model_from_json
 import img_utils
 
 
+# 继承之后，子类就全部拥有了父类中的方法和属性.比如数据增强的一些方法
 class DroneDataGenerator(ImageDataGenerator):
     """
     Generate minibatches of images and labels with real-time augmentation.
@@ -33,7 +37,7 @@ class DroneDataGenerator(ImageDataGenerator):
                 batch_size=batch_size, shuffle=shuffle, seed=seed,
                 follow_links=follow_links)
 
-
+# 继承了keras的迭代器
 class DroneDirectoryIterator(Iterator):
     """
     Class for managing data loading.of images and labels
@@ -77,6 +81,7 @@ class DroneDirectoryIterator(Iterator):
                              '; expected "rgb" or "grayscale".')
         self.color_mode = color_mode
         if self.color_mode == 'rgb':
+            # list相加,是拼起来,增加了维度
             self.image_shape = self.crop_size + (3,)
         else:
             self.image_shape = self.crop_size + (1,)
@@ -101,15 +106,20 @@ class DroneDirectoryIterator(Iterator):
 
         for subdir in experiments:
             subpath = os.path.join(directory, subdir)
+            # 读取所有图片,保存路径及其label和它的数据集类别,计数
             self._decode_experiment_dir(subpath)
 
         # Conversion of list into array
+        # floatx:float32
         self.ground_truth = np.array(self.ground_truth, dtype = K.floatx())
 
         assert self.samples > 0, "Did not find any data"
 
         print('Found {} images belonging to {} experiments.'.format(
                 self.samples, self.num_experiments))
+        # super用于调用父类的的一个方法
+        # 此处调用的是Iterator.__init__()这个方法
+        # 此处应该就是
         super(DroneDirectoryIterator, self).__init__(self.samples,
                 batch_size, shuffle, seed)
 
@@ -119,32 +129,36 @@ class DroneDirectoryIterator(Iterator):
 
     def _decode_experiment_dir(self, dir_subpath):
         # Load steerings or labels in the experiment dir
+        # 优达学城的数据集
         steerings_filename = os.path.join(dir_subpath, "sync_steering.txt")
+        # 苏黎世自制数据集
         labels_filename = os.path.join(dir_subpath, "labels.txt")
 
         # Try to load steerings first. Make sure that the steering angle or the
         # label file is in the first column. Note also that the first line are
         # comments so it should be skipped.
+        # 判断是哪种数据
+
         try:
-            ground_truth = np.loadtxt(steerings_filename, usecols=0,
-                                  delimiter=',', skiprows=1)
+            ground_truth = np.loadtxt(steerings_filename, usecols=0, delimiter=',', skiprows=1)
             exp_type = 1
-        except OSError as e:
+        except IOError as e:
             # Try load collision labels if there are no steerings
             try:
                 ground_truth = np.loadtxt(labels_filename, usecols=0)
                 exp_type = 0
-            except OSError as e:
+            except IOError as e:
                 print("Neither steerings nor labels found in dir {}".format(
                 dir_subpath))
                 raise IOError
 
 
         # Now fetch all images in the image subdir
+        # 读取所有图片,保存路径及其label和它的数据集类别,计数
         image_dir_path = os.path.join(dir_subpath, "images")
         for root, _, files in self._recursive_list(image_dir_path):
             sorted_files = sorted(files,
-                    key = lambda fname: int(re.search(r'\d+',fname).group()))
+                    key = lambda fname: int(re.search(r'\d+',fname).group()))   # group()返回正则表达式,整体的结果
             for frame_number, fname in enumerate(sorted_files):
                 is_valid = False
                 for extension in self.formats:

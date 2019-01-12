@@ -1,3 +1,6 @@
+#!usr/bin/env python2
+#!coding=utf-8
+
 import tensorflow as tf
 import numpy as np
 import os
@@ -116,6 +119,7 @@ def _main():
     output_dim = 1
 
     # Generate training data with real-time augmentation
+    # 参数是为了传给继承父函数的__init__,因为函数本体没有__init__,不能覆盖之前的__init__
     train_datagen = utils.DroneDataGenerator(rotation_range = 0.2,
                                              rescale = 1./255,
                                              width_shift_range = 0.2,

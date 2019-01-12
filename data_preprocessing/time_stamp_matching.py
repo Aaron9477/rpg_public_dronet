@@ -10,7 +10,7 @@ import re
 import os
 
 # Path to the data extracted from the Udacity dataset
-folder = None #"training"  or "testing"
+folder = '/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/udacity_dataset2/training' #"training"  or "testing"
 assert folder, "You should provide the dataset folder"
 experiments = glob.glob(folder + "/*")
 
@@ -30,7 +30,7 @@ def getMatching(array1, array2):
     match_idx = []
     for i in array1:
         dist = abs(i - array2)
-        idx = np.where(dist == 0)[0]
+        idx = np.where(dist == 0)[0]    # 当dist=0的时候,就是时间戳对上的时候,就是这张图片是对的
         match_stamps.append(array2[idx])
         match_idx.append(idx)
     return match_stamps, match_idx
@@ -50,7 +50,7 @@ def getSyncSteering(fname, idx):
 # For every bag...
 for exp in experiments:
     # Read images
-    images = [os.path.basename(x) for x in glob.glob(exp + "/images/*.png")]
+    images = [os.path.basename(x) for x in glob.glob(exp + "/images/*.png")]    # glob用于通配符匹配,这里就是找png文件
     im_stamps = []
     for im in images:
         stamp = int(re.sub(r'\.png$', '', im))
