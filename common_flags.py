@@ -16,7 +16,7 @@ gflags.DEFINE_string('img_mode', "grayscale", 'Load mode for images, either '
 
 # Training
 gflags.DEFINE_integer('batch_size', 64, 'Batch size in training and evaluation')
-gflags.DEFINE_integer('epochs', 100, 'Number of epochs for training')
+gflags.DEFINE_integer('epochs', 200, 'Number of epochs for training')
 gflags.DEFINE_integer('log_rate', 10, 'Logging rate for full model (epochs)')
 gflags.DEFINE_integer('initial_epoch', 0, 'Initial epoch to start training')
 
@@ -27,8 +27,10 @@ gflags.DEFINE_string('train_dir', "/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_datas
                      ' training experiments')
 gflags.DEFINE_string('val_dir', "/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/validation", 'Folder containing'
                      ' validation experiments')
-gflags.DEFINE_string('test_dir', "./media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/testing", 'Folder containing'
+gflags.DEFINE_string('test_dir', "/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/testing", 'Folder containing'
                      ' testing experiments')
+gflags.DEFINE_string('log_dir', "/home/zq610/WYZ/deeplearning/network/rpg_public_dronet/logs/test", 'Folder containing'
+                     ' training logs')
 
 # Model
 gflags.DEFINE_bool('restore_model', True, 'Whether to restore a trained'

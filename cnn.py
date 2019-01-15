@@ -15,7 +15,7 @@ import cnn_models
 import utils
 import log_utils
 from common_flags import FLAGS
-
+from keras.callbacks import TensorBoard
 
 
 def getModel(img_width, img_height, img_channels, output_dim, weights_path):
@@ -44,7 +44,7 @@ def getModel(img_width, img_height, img_channels, output_dim, weights_path):
     return model
 
 
-def trainModel(train_data_generator, val_data_generator, model, initial_epoch):
+def trainModel(train_data_generator, val_data_generator, model, initial_epoch, log_dir):
     """
     Model training.
 
@@ -65,6 +65,7 @@ def trainModel(train_data_generator, val_data_generator, model, initial_epoch):
 
 
     optimizer = optimizers.Adam(decay=1e-5)
+    logging = TensorBoard(log_dir=log_dir)
 
     # Configure training process
     model.compile(loss=[utils.hard_mining_mse(model.k_mse),
@@ -89,10 +90,10 @@ def trainModel(train_data_generator, val_data_generator, model, initial_epoch):
 
     model.fit_generator(train_data_generator,
                         epochs=FLAGS.epochs, steps_per_epoch = steps_per_epoch,
-                        callbacks=[writeBestModel, saveModelAndLoss],
+                        callbacks=[writeBestModel, saveModelAndLoss, logging],
                         validation_data=val_data_generator,
                         validation_steps = validation_steps,
-                        initial_epoch=initial_epoch)
+                        initial_epoch=initial_epoch,)
 
 
 def _main():
@@ -161,7 +162,7 @@ def _main():
     utils.modelToJson(model, json_model_path)
 
     # Train model
-    trainModel(train_generator, val_generator, model, initial_epoch)
+    trainModel(train_generator, val_generator, model, initial_epoch, FLAGS.log_dir)
 
 
 def main(argv):
