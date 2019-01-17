@@ -1,3 +1,6 @@
+#!usr/bin/env python2
+#!coding=utf-8
+
 import gflags
 import numpy as np
 import os
@@ -11,6 +14,7 @@ from keras import backend as K
 import utils
 from constants import TEST_PHASE
 from common_flags import FLAGS
+# from evaluation_flags import FLAGS
 
 
 # Functions to evaluate steering prediction
