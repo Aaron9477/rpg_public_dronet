@@ -78,12 +78,13 @@ def darknet14(img_width, img_height, img_channels, output_dim):
             DarknetConv2D_BN_Leaky(1024, (3,3)),
             DarknetConv2D_BN_Leaky(256, (1,1)))(x1)
     # 下面的应该写错了,该用3*3卷积
-    middle = DarknetConv2D_BN_Leaky(256, (1,1), strides=(2,2))(x1)
-    # middle = DarknetConv2D_BN_Leaky(256, (3,3), strides=(2,2))(x1)
+    # middle = DarknetConv2D_BN_Leaky(256, (1,1), strides=(2,2))(x1)
+    middle = DarknetConv2D_BN_Leaky(256, (3,3), strides=(2,2), padding='same')(x1)
 
     x3 = add([x2, middle])
     # 下面的卷积改成3*3是不是会更好
-    x4 = DarknetConv2D_BN_Leaky(128, (1, 1))(x3)
+    # x4 = DarknetConv2D_BN_Leaky(128, (1, 1))(x3)
+    x4 = DarknetConv2D_BN_Leaky(128, (3, 3))(x3)
 
     x = Flatten()(x4)
     x = Activation('relu')(x)

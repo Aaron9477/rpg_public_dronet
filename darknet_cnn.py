@@ -68,14 +68,17 @@ def trainModel(train_data_generator, val_data_generator, model, initial_epoch, l
     logging = TensorBoard(log_dir=log_dir)
 
     # Configure training process
+    # 由于有多个output，所以可以有多个loss，最后的结果是这两个loss的和
+    # 这里输出有两个，是一个list中的两个元素，分别赋予下面的两个函数
     model.compile(loss=[utils.hard_mining_mse(model.k_mse),
                         utils.hard_mining_entropy(model.k_entropy)],
                         optimizer=optimizer, loss_weights=[model.alpha, model.beta])
 
     # Save model with the lowest validation loss
     weights_path = os.path.join(FLAGS.experiment_rootdir, 'weights_{epoch:03d}.h5')
+    # save_weights_only只保留验证集上表现最好的模型
     writeBestModel = ModelCheckpoint(filepath=weights_path, monitor='val_loss',
-                                     save_best_only=True, save_weights_only=True)
+                                     save_best_only=False, save_weights_only=True)
 
     # Save model every 'log_rate' epochs.
     # Save training and validation losses.
@@ -85,9 +88,11 @@ def trainModel(train_data_generator, val_data_generator, model, initial_epoch, l
                                             batch_size=FLAGS.batch_size)
 
     # Train model
+    # numpy.ceil向正无穷取整
     steps_per_epoch = int(np.ceil(train_data_generator.samples / FLAGS.batch_size))
     validation_steps = int(np.ceil(val_data_generator.samples / FLAGS.batch_size))
 
+    # callbacks是回调函数，在合适的时候会被调用，callbacks其实是类的list，这些类均继承callback函数
     model.fit_generator(train_data_generator,
                         epochs=FLAGS.epochs, steps_per_epoch = steps_per_epoch,
                         callbacks=[writeBestModel, saveModelAndLoss, logging],

@@ -31,6 +31,8 @@ class DroneDataGenerator(ImageDataGenerator):
     def flow_from_directory(self, directory, target_size=(224,224),
             crop_size=(250,250), color_mode='grayscale', batch_size=32,
             shuffle=True, seed=None, follow_links=False):
+        # 这里传入self是传入ImageDataGenerator这个迭代器
+        #　函数返回的是调用的另一个对象，其实当前对象的作用只在于继承之前的对象
         return DroneDirectoryIterator(
                 directory, self,
                 target_size=target_size, crop_size=crop_size, color_mode=color_mode,
@@ -181,7 +183,7 @@ class DroneDirectoryIterator(Iterator):
         # so it can be done in parallel
         return self._get_batches_of_transformed_samples(index_array)
 
-    def _get_batches_of_transformed_samples(self, index_array) :
+    def _get_batches_of_transformed_samples(self, index_array):
         """
         Public function to fetch next batch.
 
@@ -391,6 +393,7 @@ def hard_mining_entropy(k):
             true_coll = y_true[:,1]
 
             # Collision loss
+            # K.binary_crossentropy 计算输出张量和目标张量的交叉熵
             l_coll = tf.multiply((1-t), K.binary_crossentropy(true_coll, pred_coll))
 
             # Hard mining
@@ -432,3 +435,5 @@ def write_to_file(dictionary, fname):
     with open(fname, "w") as f:
         json.dump(dictionary,f)
         print("Written file {}".format(fname))
+
+

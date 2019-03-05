@@ -21,7 +21,7 @@ gflags.DEFINE_integer('log_rate', 10, 'Logging rate for full model (epochs)')
 gflags.DEFINE_integer('initial_epoch', 0, 'Initial epoch to start training')
 
 # Files
-gflags.DEFINE_string('experiment_rootdir', "/home/zq610/WYZ/deeplearning/network/rpg_public_dronet/darknet14", 'Folder '
+gflags.DEFINE_string('experiment_rootdir', "/home/zq610/WYZ/deeplearning/network/rpg_public_dronet/result/darknet14_before", 'Folder '
                      ' containing all the logs, model weights and results')
 gflags.DEFINE_string('train_dir', "/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/training", 'Folder containing'
                      ' training experiments')
@@ -35,8 +35,10 @@ gflags.DEFINE_string('log_dir', "/home/zq610/WYZ/deeplearning/network/rpg_public
 # Model
 gflags.DEFINE_bool('restore_model', False, 'Whether to restore a trained'
                    ' model for training')
-gflags.DEFINE_string('weights_fname', "weights_042.h5", '(Relative) '
+gflags.DEFINE_string('weights_fname', "weights_025.h5", '(Relative) '
                                           'filename of model weights')
 gflags.DEFINE_string('json_model_fname', "model_struct.json",
                           'Model struct json serialization, filename')
+
+# weights_025.h5 HMB_2/images/1479425040343968790不错
 

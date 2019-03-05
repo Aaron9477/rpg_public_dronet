@@ -121,11 +121,13 @@ def _main():
 
     # Generate training data with real-time augmentation
     # 参数是为了传给继承父函数的__init__,因为函数本体没有__init__,不能覆盖之前的__init__
+    # 定义对象
     train_datagen = utils.DroneDataGenerator(rotation_range = 0.2,
                                              rescale = 1./255,
                                              width_shift_range = 0.2,
                                              height_shift_range=0.2)
 
+    # 调用对象的函数
     train_generator = train_datagen.flow_from_directory(FLAGS.train_dir,
                                                         shuffle = True,
                                                         color_mode=FLAGS.img_mode,
@@ -171,8 +173,8 @@ def main(argv):
       argv = FLAGS(argv)  # parse flags
     except gflags.FlagsError:
       print ('Usage: %s ARGS\\n%s' % (sys.argv[0], FLAGS))
-
       sys.exit(1)
+
     _main()
 
 
