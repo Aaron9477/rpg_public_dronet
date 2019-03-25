@@ -1,281 +1,278 @@
 #!usr/bin/env python2
 #!coding=utf-8
-
-import gflags
+# from keras.applications.vgg16 import (
+#     VGG16, preprocess_input, decode_predictions)
+from keras.applications.resnet50 import (
+    ResNet50, preprocess_input, decode_predictions)
+from keras.preprocessing import image
+from keras.layers.core import Lambda
+from keras.models import Sequential
+from tensorflow.python.framework import ops
+import keras.backend as K
+import tensorflow as tf
 import numpy as np
-import os
+import keras
 import sys
-import glob
-from random import randint
-from sklearn import metrics
-
-from keras import backend as K
+import cv2
+from keras.models import Model
 
 import utils
-from constants import TEST_PHASE
-from common_flags import FLAGS
-# from evaluation_flags import FLAGS
+from visualization_flags import FLAGS
+import os
+import shutil
 
 
-# Functions to evaluate steering prediction
 
-def explained_variance_1d(ypred,y):
-    """
-    Var[ypred - y] / var[y].
-    https://www.quora.com/What-is-the-meaning-proportion-of-variance-explained-in-linear-regression
-    """
-    assert y.ndim == 1 and ypred.ndim == 1
-    vary = np.var(y)
-    return np.nan if vary==0 else 1 - np.var(y-ypred)/vary
+# category_index是各个类的预测概率
+def target_category_loss(x, category_index, nb_classes):
+    return tf.multiply(x, K.one_hot([category_index], nb_classes))
 
+def target_category_loss_output_shape(input_shape):
+    return input_shape
 
-def compute_explained_variance(predictions, real_values):
-    """
-    Computes the explained variance of prediction for each
-    steering and the average of them
-    """
-    assert np.all(predictions.shape == real_values.shape)
-    ex_variance = explained_variance_1d(predictions, real_values)
-    print("EVA = {}".format(ex_variance))
-    return ex_variance
+def normalize(x):
+    # utility function to normalize a tensor by its L2 norm
+    return x / (K.sqrt(K.mean(K.square(x))) + 1e-5)
 
+def load_image(path, experiment):
+    # original
+    img_path = path
+    img = image.load_img(img_path, target_size=(320, 320))
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = preprocess_input(x)
+    return x
 
-def compute_sq_residuals(predictions, real_values):
-    assert np.all(predictions.shape == real_values.shape)
-    sq_res = np.square(predictions - real_values)
-    sr = np.mean(sq_res, axis = -1)
-    print("MSE = {}".format(sr))
-    return sq_res
+    # img_path = path
+    # img = cv2.imread(img_path)
+    # img = cv2.resize(img, (320,320))
+    # gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # gray_img = cv2.GaussianBlur(gray_img, (3, 3), 0)
+    # canny = cv2.Canny(gray_img, 50, 150)
+    # img = cv2.merge([img, canny])
+    # img = img.reshape((1, img.shape[0], img.shape[1], 4))
+    # return np.asarray(img, dtype=np.float32)
 
-
-def compute_rmse(predictions, real_values):
-    assert np.all(predictions.shape == real_values.shape)
-    mse = np.mean(np.square(predictions - real_values))
-    rmse = np.sqrt(mse)
-    print("RMSE = {}".format(rmse))
-    return rmse
-
-
-def compute_highest_regression_errors(predictions, real_values, n_errors=20):
-    """
-    Compute the indexes with highest error
-    """
-    assert np.all(predictions.shape == real_values.shape)
-    sq_res = np.square(predictions - real_values)
-    highest_errors = sq_res.argsort()[-n_errors:][::-1]
-    return highest_errors
-
-
-def random_regression_baseline(real_values):
-    mean = np.mean(real_values)
-    std = np.std(real_values)
-    return np.random.normal(loc=mean, scale=abs(std), size=real_values.shape)
-
-
-def constant_baseline(real_values):
-    mean = np.mean(real_values)
-    return mean * np.ones_like(real_values)
+    # img_path = path
+    # img = image.load_img(img_path, target_size=(320, 320))
+    # if not experiment.split('/')[-1].split('_')[-1] == '3.7':
+    #     x = image.img_to_array(img)
+    #     x = np.expand_dims(x, axis=0)
+    #     x = preprocess_input(x)
+    #     return x
+    # else:
+    #     img = cv2.imread(img_path)
+    #     img = cv2.resize(img, (320, 320))
+    #
+    #     gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #     gray_img = cv2.GaussianBlur(gray_img, (3, 3), 0)
+    #     canny = cv2.Canny(gray_img, 50, 150)
+    #     x = image.img_to_array(img)
+    #     x = np.expand_dims(x, axis=0)
+    #     x = preprocess_input(x)
+    #     canny = np.expand_dims(canny, axis=2)
+    #
+    #     x = cv2.merge([x[0], canny])
+    #     return x
 
 
-def evaluate_regression(predictions, real_values, fname):
-    evas = compute_explained_variance(predictions, real_values)
-    rmse = compute_rmse(predictions, real_values)
-    highest_errors = compute_highest_regression_errors(predictions, real_values,
-            n_errors=20)
-    dictionary = {"evas": evas.tolist(), "rmse": rmse.tolist(),
-                  "highest_errors": highest_errors.tolist()}
-    utils.write_to_file(dictionary, fname)
+def register_gradient():
+    if "GuidedBackProp" not in ops._gradient_registry._registry:
+        @ops.RegisterGradient("GuidedBackProp")
+        def _GuidedBackProp(op, grad):
+            dtype = op.inputs[0].dtype
+            return grad * tf.cast(grad > 0., dtype) * \
+                tf.cast(op.inputs[0] > 0., dtype)
 
+def compile_saliency_function(model, activation_layer='res5c_branch2c'):
+    input_img = model.input
+    layer_dict = dict([(layer.name, layer) for layer in model.layers[1:]])
+    layer_output = layer_dict[activation_layer].output
+    max_output = K.max(layer_output, axis=3)
+    saliency = K.gradients(K.sum(max_output), input_img)[0]
+    # K.learning_phase()是学习阶段标志，一个布尔张量（0 = test，1 = train）
+    return K.function([input_img, K.learning_phase()], [saliency])
 
-# Functions to evaluate collision
+def modify_backprop(model, name, json_model_path, weights_load_path):
+    g = tf.get_default_graph()
+    # override the gradient function
+    with g.gradient_override_map({'Relu': name}):
+        # get layers that have an activation
+        layer_dict = [layer for layer in model.layers[1:]
+                      if hasattr(layer, 'activation')]
 
-def read_training_labels(file_name):
-    labels = []
-    try:
-        labels = np.loadtxt(file_name, usecols=0)
-        labels = np.array(labels)
-    except:
-        print("File {} failed loading labels".format(file_name)) 
-    return labels
+        # replace relu activation
+        for layer in layer_dict:
+            layer.activation = tf.nn.relu
+            # if layer.activation == keras.activations.relu:
+            #     layer.activation = tf.nn.relu
 
-
-def count_samples_per_class(train_dir):
-    experiments = glob.glob(train_dir + "/*")
-    num_class0 = 0
-    num_class1 = 0
-    for exp in experiments:
-        file_name = os.path.join(exp, "labels.txt")
+        # re-instanciate a new model
+        new_model = utils.jsonToModel(json_model_path)
         try:
-            labels = np.loadtxt(file_name, usecols=0)
-            num_class1 += np.sum(labels == 1)
-            num_class0 += np.sum(labels == 0)
+            new_model.load_weights(weights_load_path)
         except:
-            print("File {} failed loading labels".format(file_name)) 
-            continue
-    return np.array([num_class0, num_class1])
+            print("Impossible to find weight path. Returning untrained model")
+    return new_model
+
+def deprocess_image(x):
+    '''
+    Same normalization as in:
+    https://github.com/fchollet/keras/blob/master/examples/conv_filter_visualization.py
+    '''
+    if np.ndim(x) > 3:
+        x = np.squeeze(x)
+    # normalize tensor: center on 0., ensure std is 0.1
+    x -= x.mean()
+    x /= (x.std() + 1e-5)
+    x *= 0.1
+
+    # clip to [0, 1]
+    x += 0.5
+    x = np.clip(x, 0, 1)
+
+    # convert to RGB array
+    x *= 255
+    if K.image_dim_ordering() == 'th':
+        x = x.transpose((1, 2, 0))
+    x = np.clip(x, 0, 255).astype('uint8')
+    return x
+
+def _compute_gradients(tensor, var_list):
+    grads = tf.gradients(tensor, var_list)
+    return [grad if grad is not None else tf.zeros_like(var)
+            for var, grad in zip(var_list, grads)]
+
+def grad_cam(input_model, image, layer_name, pic_path):
+    model_loss = Lambda(cal_loss, output_shape=(1,),
+        arguments={'pic_path': pic_path, })(input_model.output)
+    model = Model(inputs=input_model.input, outputs=model_loss)
+    # model.summary()
+    loss = K.sum(model.output)
+
+    conv_output = [l for l in model.layers if l.name == layer_name][0].output
+    grads = normalize(_compute_gradients(loss, [conv_output])[0])
+    # 将计算图编译为具体的函数
+    gradient_function = K.function([model.input], [conv_output, grads])
+
+    output, grads_val = gradient_function([image])
+    # 下面这块不是很理解
+    output, grads_val = output[0, :], grads_val[0, :, :, :]
+
+    # 对各个通道的特征图进行取平均，得到单个通道的均值
+    weights = np.mean(grads_val, axis=(0, 1))
+    # why initialize with cam with ones
+    # cam = np.ones(output.shape[0: 2], dtype=np.float32)
+    cam = np.zeros(output.shape[0: 2], dtype=np.float32)
+
+    for i, w in enumerate(weights):
+        cam += w * output[:, :, i]
+    # resize
+    cam = cv2.resize(cam, (320, 320), interpolation=cv2.INTER_CUBIC)
+    # 取正值
+    cam = np.maximum(cam, 0)
+    heatmap = cam / np.max(cam)
+
+    # Return to BGR [0..255] from the preprocessed image
+    image = image[0, :]
+    image -= np.min(image)
+    image = np.minimum(image, 255)
+
+    # all colol map to the original image
+    cam = cv2.applyColorMap(np.uint8(255 * heatmap), cv2.COLORMAP_JET)
+    cam = np.float32(cam) + np.float32(image)
+    cam = 255 * cam / np.max(cam)
+    # unit8 to save memory
+    return np.uint8(cam), heatmap
 
 
-def random_classification_baseline(real_values):
-    """
-    Randomly assigns half of the labels to class 0, and the other half to class 1
-    """
-    return [randint(0,1) for p in range(real_values.shape[0])]
+def cal_loss(predict, pic_path):
+    label_path = pic_path.split('/')[:-2]
+    label_path = '/'.join(label_path)
+    # judge the picture is HMB or GOPR
+    pic_cate_path = pic_path.split('/')[-3].split('_')[0]
+    if pic_cate_path == 'HMB':
+        pic_cate = 'HMB'
+    else:
+        pic_cate = 'GOPR'
+
+    if pic_cate == 'HMB':
+        steerings_filename = os.path.join(label_path, 'sync_steering.txt')
+        ground_truth_list = np.loadtxt(steerings_filename, usecols=0, delimiter=',', skiprows=1)
+        pic_list = os.listdir(os.path.join(label_path, "images"))
+        pic_list.sort()
+        index = pic_list.index(pic_path.split('/')[-1])
+        steer_ground_truth = ground_truth_list[index]
+        steer_predict = predict[0]
+        steer_loss = K.square(steer_predict - steer_ground_truth)
+        return steer_loss
+
+    elif pic_cate == 'GOPR':
+        labels_filename = os.path.join(label_path, 'labels.txt')
+        ground_truth_list = np.loadtxt(labels_filename, usecols=0)
+        pic_list = os.listdir(os.path.join(label_path, "images"))
+        pic_list.sort()
+        index = pic_list.index(pic_path.split('/')[-1])
+        coll_ground_truth = ground_truth_list[index-1]
+        coll_predict = predict[1]
+        # print(coll_ground_truth)
+        # print(coll_predict)
+        # exit()
+        coll_loss = K.binary_crossentropy([[coll_ground_truth]], coll_predict)
+        # coll_loss = K.square(coll_ground_truth - coll_predict)
+
+        return coll_loss
+
+    else:
+        raise ValueError('wrong picture category!')
 
 
-def weighted_baseline(real_values, samples_per_class):
-    """
-    Let x be the fraction of instances labeled as 0, and (1-x) the fraction of
-    instances labeled as 1, a weighted classifier randomly assigns x% of the
-    labels to class 0, and the remaining (1-x)% to class 1.
-    """
-    weights = samples_per_class/np.sum(samples_per_class)
-    return np.random.choice(2, real_values.shape[0], p=weights)
-
-
-def majority_class_baseline(real_values, samples_per_class):
-    """
-    Classify all test data as the most common label
-    """
-    major_class = np.argmax(samples_per_class)
-    return [major_class for i in real_values]
-
-            
-def compute_highest_classification_errors(predictions, real_values, n_errors=20):
-    """
-    Compute the indexes with highest error
-    """
-    assert np.all(predictions.shape == real_values.shape)
-    dist = abs(predictions - real_values)
-    highest_errors = dist.argsort()[-n_errors:][::-1]
-    return highest_errors
-
-
-def evaluate_classification(pred_prob, pred_labels, real_labels, fname):
-    ave_accuracy = metrics.accuracy_score(real_labels, pred_labels)
-    print('Average accuracy = ', ave_accuracy)
-    precision = metrics.precision_score(real_labels, pred_labels)
-    print('Precision = ', precision)
-    recall = metrics.precision_score(real_labels, pred_labels)
-    print('Recall = ', recall)
-    f_score = metrics.f1_score(real_labels, pred_labels)
-    print('F1-score = ', f_score)
-    highest_errors = compute_highest_classification_errors(pred_prob, real_labels,
-            n_errors=20)
-    dictionary = {"ave_accuracy": ave_accuracy.tolist(), "precision": precision.tolist(),
-                  "recall": recall.tolist(), "f_score": f_score.tolist(),
-                  "highest_errors": highest_errors.tolist()}
-    utils.write_to_file(dictionary, fname)
-
-
-
-def _main():
-    layer_visualize = 'conv2d_9'
-    preprocessed_input = load_image(sys.argv[1])
-
-    # Set testing mode (dropout/batchnormalization)
-    K.set_learning_phase(TEST_PHASE)
-
-    # Generate testing data
-    test_datagen = utils.DroneDataGenerator(rescale=1./255)
-    test_generator = test_datagen.flow_from_directory(FLAGS.test_dir,
-                          shuffle=False,
-                          color_mode=FLAGS.img_mode,
-                          target_size=(FLAGS.img_width, FLAGS.img_height),
-                          crop_size=(FLAGS.crop_img_height, FLAGS.crop_img_width),
-                          batch_size = FLAGS.batch_size)
+if __name__ == "__main__":
+    argv = FLAGS(sys.argv)
+    layer_visualize = "conv2d_10"
+    pic_id = '1479425040343968790'
+    # weights_025.h5 HMB_2/images/1479425040343968790不错
+    # pic_path = "/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/training/GOPR0300/images/frame_00392.jpg"
+    pic_path = "/media/zq610/2C9BDE0469DC4DFC/ubuntu/dl_dataset/Dornet/training/HMB_2/images/{pic_id}.png".format(pic_id=pic_id)
+    preprocessed_input = load_image(pic_path, FLAGS.experiment_rootdir)
+    # preprocessed_input = load_image(sys.argv[1])
 
     # Load json and create model
     json_model_path = os.path.join(FLAGS.experiment_rootdir, FLAGS.json_model_fname)
-    model = utils.jsonToModel(json_model_path)
+    weight_path = os.path.join(FLAGS.experiment_rootdir, FLAGS.weights_fname)
 
-    # Load weights
-    weights_load_path = os.path.join(FLAGS.experiment_rootdir, FLAGS.weights_fname)
+    # json_model_path = '/home/zq610/WYZ/deeplearning/network/rpg_public_dronet/model/model_struct.json'
+    # weight_path = '/home/zq610/WYZ/deeplearning/network/rpg_public_dronet/model/model_weights.h5'
+
+    model = utils.jsonToModel(json_model_path)
+    weights_load_path = weight_path
     try:
         model.load_weights(weights_load_path)
         print("Loaded model from {}".format(weights_load_path))
     except:
         print("Impossible to find weight path. Returning untrained model")
 
-
-    # Compile model
-    model.compile(loss='mse', optimizer='adam')
-
-    # Get predictions and ground truth
-    n_samples = test_generator.samples
-    nb_batches = int(np.ceil(n_samples / FLAGS.batch_size))
-
-    predictions, ground_truth, t = utils.compute_predictions_and_gt(
-            model, test_generator, nb_batches, verbose = 1)
-
-    # Param t. t=1 steering, t=0 collision
-    t_mask = t==1
+    cam, heatmap = grad_cam(model, preprocessed_input, layer_visualize, pic_path)
+    # while(cv2.waitKey(27)):
+    #     cv2.imshow("WindowNameHere", cam)
 
 
-    # ************************* Steering evaluation ***************************
-    
-    # Predicted and real steerings
-    pred_steerings = predictions[t_mask,0]
-    real_steerings = ground_truth[t_mask,0]
+    cv2.imwrite("{pic_id}_heat.jpg".format(pic_id=pic_id).format(pic_id=pic_id), cam)
 
-    # Compute random and constant baselines for steerings
-    random_steerings = random_regression_baseline(real_steerings)
-    constant_steerings = constant_baseline(real_steerings)
-
-    # Create dictionary with filenames
-    dict_fname = {'test_regression.json': pred_steerings,
-                  'random_regression.json': random_steerings,
-                  'constant_regression.json': constant_steerings}
-
-    # Evaluate predictions: EVA, residuals, and highest errors
-    for fname, pred in dict_fname.items():
-        abs_fname = os.path.join(FLAGS.experiment_rootdir, fname)
-        evaluate_regression(pred, real_steerings, abs_fname)
-
-    # Write predicted and real steerings
-    dict_test = {'pred_steerings': pred_steerings.tolist(),
-                 'real_steerings': real_steerings.tolist()}
-    utils.write_to_file(dict_test,os.path.join(FLAGS.experiment_rootdir,
-                                               'predicted_and_real_steerings.json'))
+    register_gradient()
+    guided_model = modify_backprop(model, 'GuidedBackProp', json_model_path, weights_load_path)
+    saliency_fn = compile_saliency_function(guided_model, layer_visualize)
+    saliency = saliency_fn([preprocessed_input, 0])
+    # np.newaxis加一个维度
+    gradcam = saliency[0] * heatmap[..., np.newaxis]
+    cv2.imwrite("{pic_id}_guided.jpg".format(pic_id=pic_id), deprocess_image(gradcam))
+    shutil.copy(pic_path, "{pic_id}.png".format(pic_id=pic_id))
 
 
-
-    # *********************** Collision evaluation ****************************
-    
-    # Predicted probabilities and real labels
-    pred_prob = predictions[~t_mask,1]
-    pred_labels = np.zeros_like(pred_prob)
-    pred_labels[pred_prob >= 0.5] = 1
-               
-    real_labels = ground_truth[~t_mask,1]
-
-    # Compute random, weighted and majorirty-class baselines for collision
-    random_labels = random_classification_baseline(real_labels)
-
-    # Create dictionary with filenames
-    dict_fname = {'test_classification.json': pred_labels,
-                  'random_classification.json': random_labels}
-
-    # Evaluate predictions: accuracy, precision, recall, F1-score, and highest errors
-    for fname, pred in dict_fname.items():
-        abs_fname = os.path.join(FLAGS.experiment_rootdir, fname)
-        evaluate_classification(pred_prob, pred, real_labels, abs_fname)
-
-    # Write predicted probabilities and real labels
-    dict_test = {'pred_probabilities': pred_prob.tolist(),
-                 'real_labels': real_labels.tolist()}
-    utils.write_to_file(dict_test,os.path.join(FLAGS.experiment_rootdir,
-                                               'predicted_and_real_labels.json'))
-
-
-def main(argv):
-    # Utility main to load flags
-    try:
-      argv = FLAGS(argv)  # parse flags
-    except gflags.FlagsError:
-      print ('Usage: %s ARGS\\n%s' % (sys.argv[0], FLAGS))
-      sys.exit(1)
-    _main()
-
-
-if __name__ == "__main__":
-    main(sys.argv)
+# register_gradient()
+# guided_model = modify_backprop(model, 'GuidedBackProp')
+# saliency_fn = compile_saliency_function(guided_model, layer_visualize)
+# saliency = saliency_fn([preprocessed_input, 0])
+# # np.newaxis加一个维度
+# gradcam = saliency[0] * heatmap[..., np.newaxis]
+# cv2.imwrite("guided_gradcam.jpg", deprocess_image(gradcam))

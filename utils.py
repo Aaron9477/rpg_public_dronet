@@ -78,13 +78,15 @@ class DroneDirectoryIterator(Iterator):
         self.target_size = tuple(target_size)
         self.crop_size = tuple(crop_size)
         self.follow_links = follow_links
-        if color_mode not in {'rgb', 'grayscale'}:
+        if color_mode not in {'rgb', 'grayscale', 'rgbe'}:
             raise ValueError('Invalid color mode:', color_mode,
-                             '; expected "rgb" or "grayscale".')
+                             '; expected "rgb" or "grayscale" or "rgbe".')
         self.color_mode = color_mode
         if self.color_mode == 'rgb':
             # list相加,是拼起来,增加了维度
             self.image_shape = self.crop_size + (3,)
+        elif self.color_mode == 'rgbe':
+            self.image_shape = self.crop_size + (4,)
         else:
             self.image_shape = self.crop_size + (1,)
 
@@ -200,13 +202,11 @@ class DroneDirectoryIterator(Iterator):
         batch_coll = np.zeros((current_batch_size, 2,),
                 dtype=K.floatx())
 
-        grayscale = self.color_mode == 'grayscale'
-
         # Build batch of image data
         for i, j in enumerate(index_array):
             fname = self.filenames[j]
             x = img_utils.load_img(os.path.join(self.directory, fname),
-                    grayscale=grayscale,
+                    color_mode=self.color_mode,
                     crop_size=self.crop_size,
                     target_size=self.target_size)
 

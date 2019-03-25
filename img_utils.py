@@ -1,9 +1,11 @@
+#!usr/bin/env python2
+#!coding=utf-8
 import cv2
 import numpy as np
 
 
 
-def load_img(path, grayscale=False, target_size=None, crop_size=None):
+def load_img(path, color_mode='rgb', target_size=None, crop_size=None):
     """
     Load an image.
     
@@ -20,9 +22,14 @@ def load_img(path, grayscale=False, target_size=None, crop_size=None):
     """
 
     img = cv2.imread(path)
-    if grayscale:
+    if color_mode == 'grayscale':
         if len(img.shape) != 2:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    elif color_mode == 'rgbe':
+        gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray_img = cv2.GaussianBlur(gray_img, (3, 3), 0)
+        canny = cv2.Canny(gray_img, 50, 150)
+        img = cv2.merge([img, canny])
 
     if target_size:
         if (img.shape[0], img.shape[1]) != target_size:
@@ -31,7 +38,8 @@ def load_img(path, grayscale=False, target_size=None, crop_size=None):
     if crop_size:
         img = central_image_crop(img, crop_size[0], crop_size[1])
 
-    if grayscale:
+    if color_mode == 'grayscale':
+        # 转化成带通道数的
         img = img.reshape((img.shape[0], img.shape[1], 1))
 
     return np.asarray(img, dtype=np.float32)

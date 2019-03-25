@@ -102,3 +102,5 @@ def darknet14(img_width, img_height, img_channels, output_dim):
     print(model.summary())
 
     return model
+
+

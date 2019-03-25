@@ -10,11 +10,12 @@ from random import randint
 from sklearn import metrics
 
 from keras import backend as K
-
+import mobilenet_model
+import time
 import utils
 from constants import TEST_PHASE
-from common_flags import FLAGS
-# from evaluation_flags import FLAGS
+# from common_flags import FLAGS
+from evaluation_flags import FLAGS
 
 
 # Functions to evaluate steering prediction
@@ -183,9 +184,14 @@ def _main():
                           crop_size=(FLAGS.crop_img_height, FLAGS.crop_img_width),
                           batch_size = FLAGS.batch_size)
 
-    # Load json and create model
-    json_model_path = os.path.join(FLAGS.experiment_rootdir, FLAGS.json_model_fname)
-    model = utils.jsonToModel(json_model_path)
+
+    backbone = FLAGS.experiment_rootdir.split('/')[-1]
+    if not backbone.startswith('mobilenet'):
+        # Load json and create model
+        json_model_path = os.path.join(FLAGS.experiment_rootdir, FLAGS.json_model_fname)
+        model = utils.jsonToModel(json_model_path)
+    else:
+        model = mobilenet_model.mobilenet(320, 320, 3, 1)
 
     # Load weights
     weights_load_path = os.path.join(FLAGS.experiment_rootdir, FLAGS.weights_fname)
@@ -195,6 +201,7 @@ def _main():
     except:
         print("Impossible to find weight path. Returning untrained model")
 
+    model.summary()
 
     # Compile model
     model.compile(loss='mse', optimizer='adam')
@@ -203,8 +210,13 @@ def _main():
     n_samples = test_generator.samples
     nb_batches = int(np.ceil(n_samples / FLAGS.batch_size))
 
+    start = time.time()
+
     predictions, ground_truth, t = utils.compute_predictions_and_gt(
             model, test_generator, nb_batches, verbose = 1)
+
+    end = time.time()
+    print("All inference time is {a}".format(a=end-start))
 
     # Param t. t=1 steering, t=0 collision
     t_mask = t==1

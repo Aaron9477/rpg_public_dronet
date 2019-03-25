@@ -118,8 +118,10 @@ def _main():
         img_channels = 3
     elif FLAGS.img_mode == 'grayscale':
         img_channels = 1
+    elif FLAGS.img_mode == 'rgbe':
+        img_channels = 4
     else:
-        raise IOError("Unidentified image mode: use 'grayscale' or 'rgb'")
+        raise IOError("Unidentified image mode: use 'grayscale' or 'rgb' or 'rgbe'")
 
     # Output dimension (one for steering and one for collision)
     output_dim = 1
